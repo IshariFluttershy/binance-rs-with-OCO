@@ -28,6 +28,17 @@ struct OrderRequest {
     pub new_client_order_id: Option<String>,
 }
 
+struct OCOOrderRequest {
+    pub symbol: String,
+    pub qty: f64,
+    pub price: f64,
+    pub stop_price: f64,
+    pub stop_limit_price: f64,
+    pub order_side: OrderSide,
+    pub stop_limit_time_in_force: TimeInForce,
+    pub new_client_order_id: Option<String>,
+}
+
 struct OrderQuoteQuantityRequest {
     pub symbol: String,
     pub quote_order_qty: f64,
@@ -631,7 +642,36 @@ impl Account {
         };
         let order = self.build_order(sell);
         let request = build_signed_request(order, self.recv_window)?;
-        self.client.post_signed(API::Spot(Spot::Order), request)
+        println!("{}", request);
+        let request = "symbol=BTCUSDT&quantity=0.0004&price=25731.47&stopPrice=25931.47&stopLimitPrice=25931.47&stopLimitTimeInForce=FOK&recvWindow=60000&side=BUY&timestamp=1693851096808".to_string();
+        self.client.post_signed(API::Spot(Spot::Oco), request)
+    }
+
+    /// Place a custom order
+    #[allow(clippy::too_many_arguments)]
+    pub fn OCO_order<S, F>(
+        &self, symbol: S, qty: F, price: f64, stop_price: f64, stop_limit_price: f64, order_side: OrderSide,
+        stop_limit_time_in_force: TimeInForce, new_client_order_id: Option<String>,
+    ) -> Result<Transaction>
+    where
+        S: Into<String>,
+        F: Into<f64>,
+    {
+        let sell = OCOOrderRequest {
+            symbol: symbol.into(),
+            qty: qty.into(),
+            price,
+            stop_price,
+            stop_limit_price,
+            order_side,
+            stop_limit_time_in_force,
+            new_client_order_id,
+        };
+        let order = self.build_oco_order(sell);
+        let request = build_signed_request(order, self.recv_window)?;
+        println!("{}", request);
+        //let request = "symbol=BTCUSDT&quantity=0.0004&price=25731.47&stopPrice=25931.47&stopLimitPrice=25931.47&stopLimitTimeInForce=FOK&recvWindow=60000&side=BUY&timestamp=1693851096808".to_string();
+        self.client.post_signed(API::Spot(Spot::Oco), request)
     }
 
     /// Place a test custom order
@@ -743,6 +783,27 @@ impl Account {
 
         order_parameters
     }
+
+    fn build_oco_order(&self, order: OCOOrderRequest) -> BTreeMap<String, String> {
+        let mut order_parameters: BTreeMap<String, String> = BTreeMap::new();
+
+        order_parameters.insert("symbol".into(), order.symbol);
+        order_parameters.insert("side".into(), order.order_side.to_string());
+        order_parameters.insert("quantity".into(), order.qty.to_string());
+        order_parameters.insert("stopPrice".into(), order.stop_price.to_string());
+        order_parameters.insert("stopLimitPrice".into(), order.stop_limit_price.to_string());
+        
+        if order.price != 0.0 {
+            order_parameters.insert("price".into(), order.price.to_string());
+            order_parameters.insert("stopLimitTimeInForce".into(), order.stop_limit_time_in_force.to_string());
+        }
+
+        if let Some(client_order_id) = order.new_client_order_id {
+            order_parameters.insert("newClientOrderId".into(), client_order_id);
+        }
+
+        order_parameters
+    } 
 
     fn build_quote_quantity_order(
         &self, order: OrderQuoteQuantityRequest,
